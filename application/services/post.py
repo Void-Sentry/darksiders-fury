@@ -30,7 +30,7 @@ class PostService:
         other_feed_raw = self.cache.lrange(f"users:feed:{following_id}", 0, -1)
 
         user_feed = [msgpack.unpackb(post, raw=False) for post in user_feed_raw]
-        other_feed = [msgpack.unpackb(post, raw=False) for post in other_feed_raw]
+        other_feed = [msgpack.unpackb(post, raw=False) for post in other_feed_raw if post['author_id'] != user_id]
 
         merged_feed = sorted(user_feed + other_feed, key=lambda x: x['created_at'], reverse=True)
 
