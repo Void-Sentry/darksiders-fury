@@ -27,6 +27,35 @@ services:
       - source: db_client_root_crt
         target: client.root.crt
 
+  fury-test:
+    image: python:3.13.3-alpine
+    container_name: fury-test
+    restart: "no"
+    env_file:
+      - .env
+    networks:
+      - furynet
+      - busnet
+      - cachenet
+      - dbnet
+      - blobnet
+    working_dir: /app
+    volumes:
+      - .:/app
+    secrets:
+      - source: db_ca_crt
+        target: ca.crt
+      - source: db_client_root_key
+        target: client.root.key
+        mode: 0600
+      - source: db_client_root_crt
+        target: client.root.crt
+    command: >
+      sh -c "
+        pip install --no-cache-dir -r requirements/dev.txt &&
+        pytest tests
+      "
+
 networks:
   furynet:
     driver: bridge
