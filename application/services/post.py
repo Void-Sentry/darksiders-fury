@@ -25,9 +25,43 @@ class PostService:
 
         return f"data:image/{extension};base64,{base64.b64encode(image_data).decode('utf-8')}"
     
+    def update_feed_post_follow(self, user_id, following_id):
+        user_feed_raw = self.cache.lrange(f"users:feed:{user_id}", 0, -1)
+        other_feed_raw = self.cache.lrange(f"users:feed:{following_id}", 0, -1)
+
+        user_feed = [msgpack.unpackb(post, raw=False) for post in user_feed_raw]
+        other_feed = [msgpack.unpackb(post, raw=False) for post in other_feed_raw]
+
+        merged_feed = sorted(user_feed + other_feed, key=lambda x: x['created_at'], reverse=True)
+
+        packed_feed = [msgpack.packb(post, use_bin_type=True) for post in merged_feed]
+
+        feed_key = f"users:feed:{user_id}"
+        with self.cache.pipeline() as pipe:
+            pipe.delete(feed_key)
+            if packed_feed:
+                pipe.rpush(feed_key, *packed_feed)
+            pipe.execute()
+
+    def update_feed_post_unfollow(self, user_id, unfollowed_id):
+        feed_key = f"users:feed:{user_id}"
+
+        current_feed_raw = self.cache.lrange(feed_key, 0, -1)
+        current_feed = [msgpack.unpackb(post, raw=False) for post in current_feed_raw]
+        filtered_feed = [post for post in current_feed if post.get('author_id') != unfollowed_id]
+        packed_feed = [msgpack.packb(post, use_bin_type=True) for post in filtered_feed]
+
+        with self.cache.pipeline() as pipe:
+            pipe.delete(feed_key)
+            if packed_feed:
+                pipe.rpush(feed_key, *packed_feed)
+            pipe.execute()
+
+    
     def _update_feeds(self, post, followers, author_id):
         post_data = msgpack.packb({
             'id': post['id'],
+            'author_id': author_id,
             'content': post['content'],
             'image_url': post['image_url'],
             'created_at': post['created_at'].timestamp()
@@ -59,9 +93,9 @@ class PostService:
 
                 feed.append({
                     **post,
-                    'image_blob': image_blob,
                     'likes': total_likes,
-                    'liked': liked
+                    'liked': liked,
+                    'image_blob': image_blob,
                 })
 
             except (msgpack.exceptions.UnpackException, KeyError) as e:
