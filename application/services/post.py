@@ -29,10 +29,27 @@ class PostService:
         user_feed_raw = self.cache.lrange(f"users:feed:{user_id}", 0, -1)
         other_feed_raw = self.cache.lrange(f"users:feed:{following_id}", 0, -1)
 
-        user_feed = [msgpack.unpackb(post, raw=False) for post in user_feed_raw]
-        other_feed = [msgpack.unpackb(post, raw=False) for post in other_feed_raw if post['author_id'] != user_id]
+        user_feed = []
+        for post in user_feed_raw:
+            try:
+                user_feed.append(msgpack.unpackb(post, raw=False))
+            except (msgpack.exceptions.UnpackException, KeyError):
+                continue
 
-        merged_feed = sorted(user_feed + other_feed, key=lambda x: x['created_at'], reverse=True)
+        other_feed = []
+        for post in other_feed_raw:
+            try:
+                unpacked = msgpack.unpackb(post, raw=False)
+                if unpacked.get('author_id') != user_id:
+                    other_feed.append(unpacked)
+            except (msgpack.exceptions.UnpackException, KeyError):
+                continue
+
+        merged_feed = sorted(
+            user_feed + other_feed,
+            key=lambda x: x['created_at'],
+            reverse=True
+        )
 
         packed_feed = [msgpack.packb(post, use_bin_type=True) for post in merged_feed]
 
